@@ -18,23 +18,18 @@ def load_products():
 
     query = """
         insert into products (
-            record_id,
             product_id,
             product_name,
             category,
-            price,
-            valid_from,
-            valid_to
+            price
         )
         select
-            record_id,
             product_id,
             product_name,
             category,
-            price,
-            valid_from + interval '7 hours' as valid_from,
-            valid_to + interval '7 hours' as valid_to
-        from products_legacy
+            price
+        from product_history
+        where valid_to is null
     """
     
     cursor.execute(query)
@@ -43,7 +38,7 @@ def load_products():
     conn.close()
 
 with DAG(
-    dag_id="master_products",
+    dag_id="products",
     start_date=datetime(2024, 1, 1),
     schedule_interval=None,
     catchup=False

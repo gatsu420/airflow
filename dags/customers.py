@@ -7,7 +7,7 @@ import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_batch
 
-def load_customers():
+def load_customer_history():
     file_path = os.path.join(os.path.dirname(__file__), "customers.xlsx")
     df = pd.read_excel(file_path)
     print(df)
@@ -22,7 +22,7 @@ def load_customers():
     cursor = conn.cursor()
 
     update_query = """
-        update customers
+        update customer_history
         set valid_to = %s
         where customer_id = %s
         and (
@@ -32,7 +32,7 @@ def load_customers():
         and valid_to is null
     """
     insert_query = """
-        insert into customers (
+        insert into customer_history (
             customer_id,
             name,
             email,
@@ -43,7 +43,7 @@ def load_customers():
         select %s, %s, %s, %s, %s, null
         where not exists (
             select 'p'
-            from customers
+            from customer_history
             where customer_id = %s
             and valid_to is null
         )
@@ -65,6 +65,36 @@ def load_customers():
     cursor.close()
     conn.close()
 
+def load_customers():
+    conn = psycopg2.connect(
+        host="postgres",
+        port="5432",
+        database="datamart",
+        user="airflow",
+        password="airflow"
+    )
+    cursor = conn.cursor()
+
+    query = """
+        insert into customers (
+            customer_id,
+            name,
+            email,
+            registration_date
+        )
+        select
+            customer_id,
+            name,
+            email,
+            registration_date
+        from customer_history
+        where valid_to is null
+    """
+
+    cursor.execute(query)
+    conn.commit()
+    cursor.close()
+    conn.close()
 
 with DAG(
     dag_id="customers",
@@ -72,7 +102,13 @@ with DAG(
     schedule_interval=None,
     catchup=False
 ) as dag:
-    load_task = PythonOperator(
-        task_id="load",
+    load_customer_history_task = PythonOperator(
+        task_id="load_customer_history",
+        python_callable=load_customer_history
+    )
+    load_customers_task = PythonOperator(
+        task_id="load_customers",
         python_callable=load_customers
     )
+
+    load_customer_history_task >> load_customers_task
