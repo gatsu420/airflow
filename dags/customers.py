@@ -3,13 +3,36 @@ from airflow.operators.python import PythonOperator
 from datetime import datetime
 import pytz
 import os
+import sys
 import pandas as pd
 import psycopg2
 from psycopg2.extras import execute_batch
+from cerberus import Validator
 
 def load_customer_history():
     file_path = os.path.join(os.path.dirname(__file__), "customers.xlsx")
     df = pd.read_excel(file_path)
+    df["registration_date"] = pd.to_datetime(df["registration_date"])
+
+    # Validate df according to schema. WIll throw fatal error if
+    # 1) At least one field is missing, or
+    # 2) At least one field is null, or
+    # 3) Wrong format (e.g., customer_id inputted as integer instead of string).
+    schema = {
+        "customer_id": {"type": "string"},
+        "name": {"type": "string"},
+        "email": {"type": "string"},
+        "registration_date": {"type": "datetime"}
+    }
+    validator = Validator(schema)
+    for i, row in df.iterrows():
+        row_dict = row.to_dict()
+
+        for k, v in row_dict.items():
+            if not validator.validate({k: v}):
+                print(f"row {i+1} field {k} has maslformed value '{v}': {validator.errors}")
+                sys.exit(1)
+
     print(df)
 
     conn = psycopg2.connect(
